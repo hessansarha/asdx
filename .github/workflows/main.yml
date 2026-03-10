@@ -1,4 +1,4 @@
-name: Final-Manual-Chromebook-Build
+name: Final-Hatch-Build-From-Video
 
 on:
   workflow_dispatch:
@@ -7,58 +7,58 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Clean and Setup
+      - name: 1. Clean Server
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          sudo apt update && sudo apt install -y unzip tar pv qemu-kvm qemu-utils
+          sudo docker image prune -a -f
 
-      - name: 2. Download Working Brunch (r121)
-        run: |
-          # هذا الرابط تم التأكد منه الآن، لن يعطيك 404
-          curl -L "https://github.com/sebanc/brunch/releases/download/r121/brunch_r121_stable_20240216.tar.gz" -o brunch.tar.gz
-          ls -lh brunch.tar.gz
+      - name: 2. Install Build Tools
+        run: sudo apt update && sudo apt install -y unzip tar pv qemu-kvm qemu-utils
 
-      - name: 3. Download Hatch Recovery
+      - name: 3. Download Your Full Package
         run: |
-          # تحميل الملف من رابط الدرايف المباشر الخاص بك
-          curl -L "https://drive.usercontent.google.com/download?id=1VuhGxGRVrIVqKN2l0AZE0tzLh03VbIou&export=download" -o hatch.zip
+          # تحميل الملف المدمج الذي يحتوي على كل شيء (من رابطك)
+          curl -L "https://drive.usercontent.google.com/download?id=19eWMfDpelImZVh-W8H9gn_F7kqLJwexG&export=download" -o package.zip
+          ls -lh package.zip
 
-      - name: 4. Extract and Build Image
+      - name: 4. Extract and Locate Files (Smart Search)
         run: |
-          tar -xvf brunch.tar.gz
-          unzip -o hatch.zip
+          unzip -o package.zip
           
-          # استخراج ملف الـ .bin من داخل ملف الـ zip
-          IMAGE_FILE=$(ls *.bin | head -n 1)
-          echo "Building using: $IMAGE_FILE"
+          # البحث عن ملف Brunch (r145) واستخراجه أينما كان
+          BRUNCH_FILE=$(find . -name "brunch_*.tar.gz" | head -n 1)
+          tar -xvf "$BRUNCH_FILE"
           
-          # بناء نسخة الـ Chromebook (تأكد أن الملف chromeos-install.sh موجود)
-          sudo bash chromeos-install.sh -src "$IMAGE_FILE" -dst chromeos.img
+          # البحث عن ملف الـ Recovery (.bin) الخاص بـ Hatch
+          # سنبحث داخل المجلدات التي ظهرت في الفيديو
+          RECOVERY_FILE=$(find . -name "*hatch*.bin" | head -n 1)
+          echo "Found Recovery: $RECOVERY_FILE"
+          
+          # بناء النظام
+          sudo bash chromeos-install.sh -src "$RECOVERY_FILE" -dst chromeos.img
 
       - name: 5. Connect Tailscale
         uses: tailscale/github-action@v2
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
 
-      - name: 6. Launch Chromebook (Auto-RAM)
+      - name: 6. Launch Your Chromebook
         run: |
           TOTAL_RAM=$(free -g | awk '/^Mem:/{print $2}')
           ALLOCATED_RAM=$((TOTAL_RAM - 1))
           
-          # تشغيل النظام محلياً كجهاز Chromebook حقيقي
           docker run -d --name chromebook --device /dev/kvm -p 3389:3389 \
           -v $(pwd)/chromeos.img:/image/chromeos.img \
           -e RAM=${ALLOCATED_RAM} \
           -e CORES=$(nproc) \
           -e EXTRA="-vga virtio -display none -usb -device usb-tablet" \
-          sickcodes/docker-chromeos:latest || true 
-          # ملاحظة: استخدمنا || true لضمان استمرار السكربت حتى لو اعترض Docker
+          sickcodes/docker-chromeos:latest
 
-      - name: 7. Status
+      - name: 7. Get IP
         run: |
           echo "===================================================="
           tailscale ip -4
           echo "===================================================="
 
-      - name: 8. Keep Session Alive
+      - name: 8. Keep Alive
         run: while true; do sleep 300; done
