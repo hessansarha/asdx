@@ -1,4 +1,4 @@
-name: Final-Hatch-Build-From-Video
+name: Final-Hatch-Force-Download
 
 on:
   workflow_dispatch:
@@ -7,32 +7,32 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Clean Server
+      - name: 1. Maximize Space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
           sudo docker image prune -a -f
 
-      - name: 2. Install Build Tools
+      - name: 2. Install Tools
         run: sudo apt update && sudo apt install -y unzip tar pv qemu-kvm qemu-utils
 
-      - name: 3. Download Your Full Package
+      - name: 3. Smart Download (Bypass Google Virus Warning)
         run: |
-          # تحميل الملف المدمج الذي يحتوي على كل شيء (من رابطك)
-          curl -L "https://drive.usercontent.google.com/download?id=19eWMfDpelImZVh-W8H9gn_F7kqLJwexG&export=download" -o package.zip
+          # هذا الكود يستخرج "توكن" التأكيد من جوجل لتحميل الملف الضخم كاملاً
+          CONFIRM=$(curl -sc /tmp/cookies.txt "https://docs.google.com/uc?export=download&id=19eWMfDpelImZVh-W8H9gn_F7kqLJwexG" | sed -rn 's/.*confirm=([0-9A-Za-z_]+).*/\1\n/p')
+          curl -Lb /tmp/cookies.txt "https://docs.google.com/uc?export=download&confirm=$CONFIRM&id=19eWMfDpelImZVh-W8H9gn_F7kqLJwexG" -o package.zip
+          
+          # التأكد من الحجم (لو نجح سيظهر لك رقم بالجيجابايت GB)
           ls -lh package.zip
 
-      - name: 4. Extract and Locate Files (Smart Search)
+      - name: 4. Extraction and Build
         run: |
           unzip -o package.zip
-          
-          # البحث عن ملف Brunch (r145) واستخراجه أينما كان
+          # البحث عن Brunch r145 واستخراجه
           BRUNCH_FILE=$(find . -name "brunch_*.tar.gz" | head -n 1)
           tar -xvf "$BRUNCH_FILE"
           
-          # البحث عن ملف الـ Recovery (.bin) الخاص بـ Hatch
-          # سنبحث داخل المجلدات التي ظهرت في الفيديو
+          # البحث عن ملف الـ Recovery
           RECOVERY_FILE=$(find . -name "*hatch*.bin" | head -n 1)
-          echo "Found Recovery: $RECOVERY_FILE"
           
           # بناء النظام
           sudo bash chromeos-install.sh -src "$RECOVERY_FILE" -dst chromeos.img
@@ -42,14 +42,11 @@ jobs:
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
 
-      - name: 6. Launch Your Chromebook
+      - name: 6. Launch Chromebook
         run: |
-          TOTAL_RAM=$(free -g | awk '/^Mem:/{print $2}')
-          ALLOCATED_RAM=$((TOTAL_RAM - 1))
-          
           docker run -d --name chromebook --device /dev/kvm -p 3389:3389 \
           -v $(pwd)/chromeos.img:/image/chromeos.img \
-          -e RAM=${ALLOCATED_RAM} \
+          -e RAM=$(($(free -g | awk '/^Mem:/{print $2}') - 1)) \
           -e CORES=$(nproc) \
           -e EXTRA="-vga virtio -display none -usb -device usb-tablet" \
           sickcodes/docker-chromeos:latest
