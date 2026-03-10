@@ -1,4 +1,4 @@
-name: ChromeOS-Hatch-Unified-ONLY
+name: ChromeOS-Hatch-Unified-ONL
 
 on:
   workflow_dispatch:
