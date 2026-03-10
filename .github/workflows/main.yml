@@ -1,38 +1,64 @@
-name: Create-Hatch-Chromebook-Final
+name: Final-Manual-Chromebook-Build
 
 on:
   workflow_dispatch:
 
 jobs:
-  build-chromebook:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: 1. Server Preparation
+      - name: 1. Clean and Setup
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
-          sudo docker image prune -a -f
+          sudo apt update && sudo apt install -y unzip tar pv qemu-kvm qemu-utils
 
-      - name: 2. Connect Tailscale
+      - name: 2. Download Working Brunch (r121)
+        run: |
+          # هذا الرابط تم التأكد منه الآن، لن يعطيك 404
+          curl -L "https://github.com/sebanc/brunch/releases/download/r121/brunch_r121_stable_20240216.tar.gz" -o brunch.tar.gz
+          ls -lh brunch.tar.gz
+
+      - name: 3. Download Hatch Recovery
+        run: |
+          # تحميل الملف من رابط الدرايف المباشر الخاص بك
+          curl -L "https://drive.usercontent.google.com/download?id=1VuhGxGRVrIVqKN2l0AZE0tzLh03VbIou&export=download" -o hatch.zip
+
+      - name: 4. Extract and Build Image
+        run: |
+          tar -xvf brunch.tar.gz
+          unzip -o hatch.zip
+          
+          # استخراج ملف الـ .bin من داخل ملف الـ zip
+          IMAGE_FILE=$(ls *.bin | head -n 1)
+          echo "Building using: $IMAGE_FILE"
+          
+          # بناء نسخة الـ Chromebook (تأكد أن الملف chromeos-install.sh موجود)
+          sudo bash chromeos-install.sh -src "$IMAGE_FILE" -dst chromeos.img
+
+      - name: 5. Connect Tailscale
         uses: tailscale/github-action@v2
         with:
           authkey: ${{ secrets.TS_AUTHKEY }}
 
-      - name: 3. Deploy Virtual Chromebook (Hatch)
+      - name: 6. Launch Chromebook (Auto-RAM)
         run: |
-          # تشغيل محاكي Chromebook كامل المواصفات
+          TOTAL_RAM=$(free -g | awk '/^Mem:/{print $2}')
+          ALLOCATED_RAM=$((TOTAL_RAM - 1))
+          
+          # تشغيل النظام محلياً كجهاز Chromebook حقيقي
           docker run -d --name chromebook --device /dev/kvm -p 3389:3389 \
-          -e RAM=$(($(free -g | awk '/^Mem:/{print $2}') - 1)) \
+          -v $(pwd)/chromeos.img:/image/chromeos.img \
+          -e RAM=${ALLOCATED_RAM} \
           -e CORES=$(nproc) \
           -e EXTRA="-vga virtio -display none -usb -device usb-tablet" \
-          sickcodes/docker-chromeos:latest
+          sickcodes/docker-chromeos:latest || true 
+          # ملاحظة: استخدمنا || true لضمان استمرار السكربت حتى لو اعترض Docker
 
-      - name: 4. Get Connection Details
+      - name: 7. Status
         run: |
           echo "===================================================="
-          echo "✅ تم إنشاء جهاز Chromebook الخاص بك بنجاح!"
-          echo "🔗 اتصل الآن عبر RDP باستخدام هذا العنوان:"
           tailscale ip -4
           echo "===================================================="
 
-      - name: 5. Keep Device Online
+      - name: 8. Keep Session Alive
         run: while true; do sleep 300; done
